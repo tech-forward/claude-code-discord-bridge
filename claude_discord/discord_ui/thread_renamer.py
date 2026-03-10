@@ -11,20 +11,68 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
 _PROMPT_TEMPLATE = """\
-Generate a short, descriptive title (max 80 characters) for a chat thread.
-The title should clearly summarize the user's request or topic.
-Reply with ONLY the title — no quotes, no punctuation at the end, no explanation.
+Output a short thread title (max 80 characters) for the message below.
+Rules: single line only, no prefix like "Title:" or "Here's a title:", no quotes, no markdown.
 
-[USER MESSAGE]
 {text}
 """
 
 _TIMEOUT_SECONDS = 30
 _MAX_TITLE_LENGTH = 90  # Discord thread name limit is 100; leave a small margin
+
+# Prefixes that models sometimes add before the actual title
+_PREFIX_RE = re.compile(
+    r"^(?:title|タイトル|here'?s?\s+(?:a\s+)?(?:suggested\s+)?title|suggested title)\s*[:：]\s*",
+    re.IGNORECASE,
+)
+
+# Separator lines: sequences of ─ (U+2500), -, spaces, or backticks
+_SEPARATOR_RE = re.compile(r"^[\u2500\-\s`]+$")
+
+
+def _clean_title(raw: str) -> str:
+    """Extract a clean single-line title from raw model output.
+
+    Skips explanatory output mode Insight blocks (★ Insight ... ─────) and
+    other structural noise before returning the first meaningful content line.
+    """
+    in_insight_block = False
+
+    for raw_line in raw.splitlines():
+        # Strip backticks used as decorators around insight markers/separators
+        stripped = raw_line.strip().strip("`").strip()
+
+        # Detect insight block header (★ Insight marker)
+        if "\u2605 Insight" in stripped:  # ★ = U+2605
+            in_insight_block = True
+            continue
+
+        # Detect insight block end: a separator line of ─ chars after the header
+        is_separator = bool(stripped) and bool(_SEPARATOR_RE.fullmatch(stripped))
+        if in_insight_block and is_separator:
+            in_insight_block = False
+            continue
+
+        # Skip lines inside insight blocks and standalone separator lines
+        if in_insight_block or is_separator:
+            continue
+
+        # Skip empty lines
+        if not stripped:
+            continue
+
+        # Found the first real content line — apply formatting cleanup
+        line = stripped.strip("*_").strip("\"'")
+        line = _PREFIX_RE.sub("", line).strip()
+        if line:
+            return line
+
+    return ""
 
 
 async def suggest_title(
@@ -58,10 +106,8 @@ async def suggest_title(
             logger.warning("thread title renamer timed out after %ds", _TIMEOUT_SECONDS)
             return None
 
-        raw = stdout.decode(errors="replace").strip()
-        # Strip surrounding quotes that some models add
-        raw = raw.strip("\"'")
-        title = raw.strip()
+        raw = stdout.decode(errors="replace")
+        title = _clean_title(raw)
 
         if not title:
             logger.debug("thread title renamer returned empty output")
