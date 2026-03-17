@@ -466,6 +466,14 @@ class EventProcessor:
                 context_used=context_used,
             )
 
+        # Mark thread as completed by prefixing "済✅" to the thread name.
+        # Only applies to non-chat_only sessions (full Claude Code sessions).
+        if not self._chat_only:
+            asyncio.create_task(
+                _mark_thread_complete(self._config.thread),
+                name=f"thread-complete-{self._config.thread.id}",
+            )
+
         # Reset for potential next streamer
         self._streamer = StreamingMessageManager(self._config.thread)
 
@@ -702,3 +710,21 @@ async def _classify_and_update_inbox(
 
     except Exception:
         logger.warning("inbox classify task failed for thread_id=%d", thread_id, exc_info=True)
+
+
+async def _mark_thread_complete(thread: discord.Thread) -> None:
+    """Prefix the thread name with '済✅' to signal session completion."""
+    try:
+        name = thread.name
+        # Skip if already marked.
+        if name.startswith("済"):
+            return
+        new_name = f"済✅ {name}"
+        # Discord thread name max is 100 chars.
+        if len(new_name) > 100:
+            new_name = new_name[:100]
+        await thread.edit(name=new_name)
+    except Exception:
+        logger.warning(
+            "Failed to mark thread %d as complete", thread.id, exc_info=True
+        )
