@@ -668,6 +668,16 @@ class ClaudeChatCog(commands.Cog):
         session_id = record.session_id if record else None
         prompt, image_urls = await self._build_prompt_and_images(message)
 
+        # When there is no session record, this is the first human reply in a
+        # thread created via /api/spawn with auto_start=false.  The seed
+        # message (posted by the bot) contains important context (e.g. the
+        # goodmorning summary) that Claude needs to see.  Fetch it and prepend
+        # to the prompt so Claude starts with full context.
+        if record is None:
+            seed_context = await self._fetch_seed_context(thread)
+            if seed_context:
+                prompt = f"{seed_context}\n\n---\n\n{prompt}"
+
         # Nothing to send — ignore silently (e.g. unsupported attachment only).
         if not prompt and not image_urls:
             return
@@ -713,6 +723,29 @@ class ClaudeChatCog(commands.Cog):
     async def _build_prompt_and_images(self, message: discord.Message) -> tuple[str, list[str]]:
         """Delegate to the standalone prompt_builder module."""
         return await build_prompt_and_images(message)
+
+    @staticmethod
+    async def _fetch_seed_context(thread: discord.Thread) -> str | None:
+        """Return the text of the first (seed) message in a thread, if posted by the bot.
+
+        Used to recover context from ``/api/spawn`` threads with ``auto_start=false``,
+        where the bot posted a seed message but did not start Claude.  Returns
+        ``None`` if the seed message cannot be retrieved or was not from a bot.
+        """
+        try:
+            # oldest_first via after=None with limit=1 is the most efficient
+            # way to get the first message in a thread.
+            first_messages = [msg async for msg in thread.history(limit=1, oldest_first=True)]
+            if not first_messages:
+                return None
+            seed = first_messages[0]
+            # Only include bot-authored seed messages (from /api/spawn).
+            if not seed.author.bot:
+                return None
+            return seed.content or None
+        except Exception:
+            logger.debug("Failed to fetch seed message for thread %d", thread.id, exc_info=True)
+            return None
 
     async def _run_claude(
         self,

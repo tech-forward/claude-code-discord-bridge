@@ -424,6 +424,71 @@ class TestSpawnSession:
         mock_run.assert_not_called()
 
 
+class TestFetchSeedContext:
+    """Tests for ClaudeChatCog._fetch_seed_context()."""
+
+    @pytest.mark.asyncio
+    async def test_returns_bot_seed_message_content(self) -> None:
+        """When the first message is from a bot, return its content."""
+        seed_msg = MagicMock()
+        seed_msg.author.bot = True
+        seed_msg.content = "☀️ おはようございます！"
+
+        thread = MagicMock(spec=discord.Thread)
+        thread.id = 42
+
+        async def _fake_history(**kwargs: object) -> list[MagicMock]:
+            yield seed_msg  # type: ignore[misc]
+
+        thread.history = _fake_history
+
+        result = await ClaudeChatCog._fetch_seed_context(thread)
+        assert result == "☀️ おはようございます！"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_non_bot_message(self) -> None:
+        """When the first message is from a human, return None."""
+        seed_msg = MagicMock()
+        seed_msg.author.bot = False
+        seed_msg.content = "Hello"
+
+        thread = MagicMock(spec=discord.Thread)
+        thread.id = 42
+
+        async def _fake_history(**kwargs: object) -> list[MagicMock]:
+            yield seed_msg  # type: ignore[misc]
+
+        thread.history = _fake_history
+
+        result = await ClaudeChatCog._fetch_seed_context(thread)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_empty_thread(self) -> None:
+        """When the thread has no messages, return None."""
+        thread = MagicMock(spec=discord.Thread)
+        thread.id = 42
+
+        async def _fake_history(**kwargs: object) -> list[MagicMock]:
+            return
+            yield  # type: ignore[misc]  # make it an async generator
+
+        thread.history = _fake_history
+
+        result = await ClaudeChatCog._fetch_seed_context(thread)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_exception(self) -> None:
+        """On any error, return None gracefully."""
+        thread = MagicMock(spec=discord.Thread)
+        thread.id = 42
+        thread.history = MagicMock(side_effect=Exception("API error"))
+
+        result = await ClaudeChatCog._fetch_seed_context(thread)
+        assert result is None
+
+
 class TestOnReady:
     """Tests for ClaudeChatCog.on_ready — startup session resume logic."""
 
