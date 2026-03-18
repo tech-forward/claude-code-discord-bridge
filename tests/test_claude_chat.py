@@ -399,6 +399,30 @@ class TestSpawnSession:
         user_msg_arg = mock_run.call_args.args[0]
         assert user_msg_arg is seed_msg
 
+    @pytest.mark.asyncio
+    async def test_spawn_auto_start_false_skips_run_claude(self) -> None:
+        """When auto_start=False, spawn_session creates the thread but does not run Claude."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        import discord
+
+        thread = MagicMock(spec=discord.Thread)
+        thread.send = AsyncMock()
+
+        channel = MagicMock()
+        channel.create_thread = AsyncMock(return_value=thread)
+
+        bot = MagicMock()
+        cog = ClaudeChatCog(bot=bot, repo=MagicMock(), runner=MagicMock())
+
+        mock_run = AsyncMock()
+        with patch.object(cog, "_run_claude", new=mock_run):
+            result = await cog.spawn_session(channel, "Hello", auto_start=False)
+
+        assert result is thread
+        thread.send.assert_called_once_with("Hello")
+        mock_run.assert_not_called()
+
 
 class TestOnReady:
     """Tests for ClaudeChatCog.on_ready — startup session resume logic."""

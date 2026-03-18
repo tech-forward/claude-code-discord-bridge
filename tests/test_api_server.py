@@ -490,6 +490,25 @@ class TestSpawn:
         )
         assert resp.status == 400
 
+    @pytest.mark.asyncio
+    async def test_spawn_auto_start_false_passed_to_cog(
+        self, spawn_client: TestClient, mock_cog: MagicMock
+    ) -> None:
+        await spawn_client.post(
+            "/api/spawn",
+            json={"prompt": "Morning summary", "auto_start": False},
+        )
+        kwargs = mock_cog.spawn_session.call_args.kwargs
+        assert kwargs.get("auto_start") is False
+
+    @pytest.mark.asyncio
+    async def test_spawn_auto_start_defaults_to_true(
+        self, spawn_client: TestClient, mock_cog: MagicMock
+    ) -> None:
+        await spawn_client.post("/api/spawn", json={"prompt": "Hello"})
+        kwargs = mock_cog.spawn_session.call_args.kwargs
+        assert kwargs.get("auto_start") is True
+
 
 class TestMarkResume:
     """Tests for POST /api/mark-resume endpoint."""
