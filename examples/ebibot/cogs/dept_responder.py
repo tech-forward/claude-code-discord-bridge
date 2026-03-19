@@ -212,15 +212,17 @@ class DepartmentResponderCog(commands.Cog):
 
         try:
             channel_name = getattr(message.channel, "name", "unknown")
+            # .format() converts {{...}} to {...}, so .replace() must
+            # match single-brace placeholders afterwards.
             prompt = _DEPT_PROMPT.format(
                 dept_name=dept["name"],
                 dept_description=dept["description"],
-            ).replace("{{message_text}}", message.content).replace(
-                "{{channel_name}}", channel_name
+            ).replace("{message_text}", message.content).replace(
+                "{channel_name}", channel_name
             ).replace(
-                "{{channel_id}}", str(message.channel.id)
+                "{channel_id}", str(message.channel.id)
             ).replace(
-                "{{message_id}}", str(message.id)
+                "{message_id}", str(message.id)
             )
 
             session_repo = getattr(self.components, "session_repo", None)

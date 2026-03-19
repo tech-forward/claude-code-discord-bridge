@@ -218,21 +218,23 @@ class CEOResponderCog(commands.Cog):
         channel_name = getattr(message.channel, "name", "unknown")
 
         # Use department-specific prompt when CEO posts in a department channel
+        # Use .replace() instead of .format() to safely handle messages
+        # that contain curly braces (code snippets, JSON, etc.)
         dept = self._get_department(message.channel)
         if dept:
-            prompt = _DEPT_RESPONSE_PROMPT.format(
-                dept_name=dept["name"],
-                message_text=message.content,
-                channel_name=channel_name,
-                channel_id=message.channel.id,
-                message_id=message.id,
+            prompt = (_DEPT_RESPONSE_PROMPT
+                .replace("{dept_name}", dept["name"])
+                .replace("{message_text}", message.content)
+                .replace("{channel_name}", channel_name)
+                .replace("{channel_id}", str(message.channel.id))
+                .replace("{message_id}", str(message.id))
             )
         else:
-            prompt = _RESPONSE_PROMPT.format(
-                message_text=message.content,
-                channel_name=channel_name,
-                channel_id=message.channel.id,
-                message_id=message.id,
+            prompt = (_RESPONSE_PROMPT
+                .replace("{message_text}", message.content)
+                .replace("{channel_name}", channel_name)
+                .replace("{channel_id}", str(message.channel.id))
+                .replace("{message_id}", str(message.id))
             )
 
         session_repo = getattr(self.components, "session_repo", None)
