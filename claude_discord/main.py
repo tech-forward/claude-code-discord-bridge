@@ -8,6 +8,7 @@ and optionally loads custom Cogs from an external directory via
 from __future__ import annotations
 
 import asyncio
+import atexit
 import logging
 import os
 import signal
@@ -23,6 +24,79 @@ from .setup import setup_bridge
 from .utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Singleton lock — prevent multiple ccdb instances from running concurrently
+# with the same configuration directory.
+# ---------------------------------------------------------------------------
+
+_LOCK_FILE: Path | None = None
+
+
+def _acquire_lock() -> None:
+    """Create a PID-based lock file to prevent duplicate bot processes.
+
+    If another instance is already running (lock file exists with a live PID),
+    the process exits with an error.  The lock file is automatically removed
+    on normal exit via ``atexit``.
+    """
+    global _LOCK_FILE  # noqa: PLW0603
+    lock_dir = Path(os.getenv("CCDB_DATA_DIR", "data"))
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    _LOCK_FILE = lock_dir / "ccdb.lock"
+
+    if _LOCK_FILE.exists():
+        try:
+            old_pid = int(_LOCK_FILE.read_text().strip())
+        except (ValueError, OSError):
+            old_pid = None
+
+        if old_pid is not None and _is_pid_alive(old_pid):
+            logger.error(
+                "Another ccdb instance is already running (PID %d). "
+                "Kill it first or delete %s to override.",
+                old_pid,
+                _LOCK_FILE,
+            )
+            sys.exit(1)
+        else:
+            logger.warning(
+                "Stale lock file found (PID %s) — overwriting.",
+                old_pid,
+            )
+
+    _LOCK_FILE.write_text(str(os.getpid()))
+    atexit.register(_release_lock)
+    logger.info("Lock acquired (PID %d, file=%s)", os.getpid(), _LOCK_FILE)
+
+
+def _release_lock() -> None:
+    """Remove the lock file on exit."""
+    if _LOCK_FILE is not None and _LOCK_FILE.exists():
+        try:
+            _LOCK_FILE.unlink()
+        except OSError:
+            pass
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check whether a process with the given PID is still running."""
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
 
 
 def load_config() -> dict[str, str]:
@@ -58,12 +132,14 @@ def load_config() -> dict[str, str]:
         "custom_cogs_dir": os.getenv("CUSTOM_COGS_DIR", ""),
         "cli_sessions_path": os.getenv("CLI_SESSIONS_PATH", ""),
         "thread_inbox_enabled": os.getenv("THREAD_INBOX_ENABLED", "false"),
+        "monitor_all_channels": os.getenv("CLAUDE_MONITOR_ALL_CHANNELS", "false"),
     }
 
 
 async def main() -> None:
     """Start the bot."""
     setup_logging()
+    _acquire_lock()
     config = load_config()
 
     channel_id = int(config["channel_id"])
@@ -126,6 +202,7 @@ async def main() -> None:
             claude_channel_ids=claude_channel_ids,
             cli_sessions_path=config["cli_sessions_path"] or None,
             enable_thread_inbox=config["thread_inbox_enabled"].lower() == "true",
+            monitor_all_channels=config["monitor_all_channels"].lower() in ("true", "1", "yes"),
         )
 
         # Load custom Cogs from external directory
