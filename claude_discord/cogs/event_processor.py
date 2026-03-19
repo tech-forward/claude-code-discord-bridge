@@ -267,8 +267,11 @@ class EventProcessor:
             await self._config.thread.send(embed=redacted_thinking_embed())
 
         # Text streaming — compute delta from last partial, edit in place.
-        # Always shown — this IS the chat content.
-        if event.text:
+        # In chat_only mode, suppress intermediate text so only the final
+        # result (from the RESULT event) is posted to Discord.  This prevents
+        # internal processing text ("まず〜を確認します" etc.) from being
+        # displayed while tools are running.
+        if event.text and not self._chat_only:
             await self._handle_text(event)
 
         # Tool use — post embed and start live timer. Skip in chat_only mode.
