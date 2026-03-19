@@ -387,7 +387,7 @@ class EventProcessor:
         else:
             # Post final result text only if no assistant text was already sent.
             response_text = event.text
-            if response_text and not self._assistant_text_sent:
+            if response_text and response_text.strip() and not self._assistant_text_sent:
                 last_sent: discord.Message | None = None
                 for chunk in chunk_message(response_text):
                     last_sent = await self._config.thread.send(chunk)
@@ -487,6 +487,10 @@ class EventProcessor:
     async def _handle_text(self, event: StreamEvent) -> None:
         """Stream text to Discord, computing deltas for partial events."""
         assert event.text is not None
+
+        # Guard against empty or whitespace-only text to prevent blank Discord messages
+        if not event.text.strip():
+            return
 
         if event.is_partial:
             delta = event.text[len(self._state.partial_text) :]
