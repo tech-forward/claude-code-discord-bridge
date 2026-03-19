@@ -96,6 +96,7 @@ class ClaudeChatCog(commands.Cog):
         mention_only_channel_ids: set[int] | None = None,
         inline_reply_channel_ids: set[int] | None = None,
         chat_only_channel_ids: set[int] | None = None,
+        chat_only_default: bool = False,
         auto_rename_threads: bool = False,
         monitor_all_channels: bool = False,
     ) -> None:
@@ -120,6 +121,8 @@ class ClaudeChatCog(commands.Cog):
         self._inline_reply_channel_ids: set[int] = inline_reply_channel_ids or set()
         # Channels where only text responses are shown (no tool embeds, thinking, etc.).
         self._chat_only_channel_ids: set[int] = chat_only_channel_ids or set()
+        # When True, ALL channels default to chat_only mode (suppress intermediate text).
+        self._chat_only_default: bool = chat_only_default
         self._registry = registry or getattr(bot, "session_registry", None)
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._active_runners: dict[int, ClaudeRunner] = {}
@@ -442,7 +445,7 @@ class ClaudeChatCog(commands.Cog):
     async def _handle_new_conversation(self, message: discord.Message) -> None:
         """Start a Claude Code session, creating a thread unless inline-reply mode is active."""
         prompt, image_urls = await self._build_prompt_and_images(message)
-        chat_only = message.channel.id in self._chat_only_channel_ids
+        chat_only = self._chat_only_default or message.channel.id in self._chat_only_channel_ids
         if (
             isinstance(message.channel, discord.TextChannel)
             and message.channel.id in self._inline_reply_channel_ids
@@ -716,7 +719,7 @@ class ClaudeChatCog(commands.Cog):
                     await existing_task
 
         # Determine chat_only from the parent channel of this thread.
-        chat_only = (thread.parent_id or 0) in self._chat_only_channel_ids
+        chat_only = self._chat_only_default or (thread.parent_id or 0) in self._chat_only_channel_ids
         await self._run_claude(
             message,
             thread,
