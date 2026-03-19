@@ -48,6 +48,22 @@ _POST_COMPACT_GUARDRAIL = (
 
 _TIMEOUT_PATTERN = re.compile(r"Timed out after (\d+) seconds")
 
+# Injected via --append-system-prompt in chat_only mode to suppress internal
+# reasoning from appearing in Discord.  Only the final response should be shown.
+_CHAT_ONLY_OUTPUT_RULES = (
+    "⚠️ DISCORD OUTPUT RULES (MANDATORY — chat_only channel): "
+    "Your text output is streamed directly to a Discord thread that humans read. "
+    "You MUST follow these rules:\n"
+    "1. Output ONLY your final response. Do NOT output internal reasoning, "
+    "status updates, or intermediate steps (e.g. '〇〇を確認します', "
+    "'〇〇を調査中です', '〇〇を回答します').\n"
+    "2. Do NOT narrate what you are about to do — just do it and share the result.\n"
+    "3. Do NOT output empty or near-empty messages.\n"
+    "4. If you need to think through a problem, use your internal reasoning "
+    "(thinking blocks) — do NOT write it as text output.\n"
+    "5. Start your response with the actual answer or action result."
+)
+
 
 def _make_error_embed(error: str) -> discord.Embed:
     """Return a timeout_embed for timeout errors, error_embed otherwise."""
@@ -115,6 +131,11 @@ async def _build_system_context(config: RunConfig) -> str | None:
             "Only include files the user explicitly asked to receive — "
             "not everything you create."
         )
+
+    # Chat-only output rules: suppress internal reasoning in human-facing channels.
+    if config.chat_only:
+        parts.append(_CHAT_ONLY_OUTPUT_RULES)
+        logger.info("Chat-only output rules injected for thread %d", config.thread.id)
 
     # Post-compact guardrail: prevent auto-execution of "pending tasks" from summary.
     if config.post_compact_rerun:

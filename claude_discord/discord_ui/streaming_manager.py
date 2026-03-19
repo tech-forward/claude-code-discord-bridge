@@ -89,7 +89,7 @@ class StreamingMessageManager:
         in normal operation, but prevents a Discord API error if called directly
         with an oversized buffer.
         """
-        if not self._buffer:
+        if not self._buffer or not self._buffer.strip():
             return
 
         display_text = self._buffer[:STREAM_MAX_CHARS]
