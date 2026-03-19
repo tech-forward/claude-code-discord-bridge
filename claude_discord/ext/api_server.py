@@ -46,6 +46,16 @@ def _sanitize_log(value: object) -> str:
     return re.sub(r"[\r\n]", " ", str(value))
 
 
+async def _read_json(request: web.Request) -> dict:
+    """Read JSON from request, falling back to cp932 on Windows."""
+    raw = await request.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("cp932", errors="replace")
+    return json.loads(text)
+
+
 class ApiServer:
     """Embedded REST API server for Discord bot notifications.
 
@@ -141,7 +151,7 @@ class ApiServer:
         """Start the API server."""
         self._runner = web.AppRunner(self.app)
         await self._runner.setup()
-        site = web.TCPSite(self._runner, self.host, self.port)
+        site = web.TCPSite(self._runner, self.host, self.port, reuse_address=True)
         await site.start()
         logger.info("REST API started: http://%s:%d", self.host, self.port)
 
@@ -162,7 +172,7 @@ class ApiServer:
     async def notify(self, request: web.Request) -> web.Response:
         """POST /api/notify — send an immediate notification."""
         try:
-            data = await request.json()
+            data = await _read_json(request)
         except json.JSONDecodeError:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
@@ -208,7 +218,7 @@ class ApiServer:
     async def schedule(self, request: web.Request) -> web.Response:
         """POST /api/schedule — schedule a notification for later."""
         try:
-            data = await request.json()
+            data = await _read_json(request)
         except json.JSONDecodeError:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
@@ -287,7 +297,7 @@ class ApiServer:
         if err := self._require_task_repo():
             return err
         try:
-            data = await request.json()
+            data = await _read_json(request)
         except json.JSONDecodeError:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
@@ -343,7 +353,7 @@ class ApiServer:
             return web.json_response({"error": "Invalid ID"}, status=400)
 
         try:
-            data = await request.json()
+            data = await _read_json(request)
         except json.JSONDecodeError:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
@@ -426,8 +436,8 @@ class ApiServer:
             return err
 
         try:
-            data = await request.json()
-        except json.JSONDecodeError:
+            data = await _read_json(request)
+        except (json.JSONDecodeError, ValueError):
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
         message = data.get("message", "").strip()
@@ -487,7 +497,7 @@ class ApiServer:
             ``{"status": "spawned", "thread_id": "...", "thread_name": "..."}``
         """
         try:
-            data = await request.json()
+            data = await _read_json(request)
         except json.JSONDecodeError:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
@@ -588,7 +598,7 @@ class ApiServer:
             return err
 
         try:
-            data = await request.json()
+            data = await _read_json(request)
         except json.JSONDecodeError:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
