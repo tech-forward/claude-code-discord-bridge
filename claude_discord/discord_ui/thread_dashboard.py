@@ -155,14 +155,15 @@ class ThreadStatusDashboard:
 
             await self._refresh_dashboard()
 
-        # Send mention outside the lock to avoid holding it during an HTTP call
+        # Instead of sending a noisy mention message, add a reaction to signal completion.
+        # The dashboard embed already shows thread state — no need to clutter the thread.
         if should_mention and thread is not None:
             try:
-                await thread.send(
-                    f"🟡 <@{self._owner_id}> Claude has finished — your reply is needed here."
-                )
+                async for msg in thread.history(limit=1):
+                    await msg.add_reaction("🟡")
+                    break
             except discord.HTTPException:
-                logger.debug("Failed to send owner mention in thread %d", thread_id, exc_info=True)
+                logger.debug("Failed to add completion reaction in thread %d", thread_id, exc_info=True)
 
     async def remove(self, thread_id: int) -> None:
         """Remove a thread from the dashboard and refresh."""

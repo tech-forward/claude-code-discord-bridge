@@ -747,10 +747,16 @@ class ClaudeChatCog(commands.Cog):
     ) -> None:
         """Execute Claude Code CLI and stream results to the thread."""
         if self._semaphore.locked():
-            await thread.send(
-                f"\u23f3 Waiting for a free session slot... "
-                f"({self._max_concurrent} max sessions running)"
-            )
+            # Add hourglass reaction instead of posting a visible message
+            # to avoid cluttering the thread for the user
+            try:
+                if hasattr(thread, 'parent') and thread.parent:
+                    # Get the last message in thread to react to
+                    async for msg in thread.history(limit=1):
+                        await msg.add_reaction("\u23f3")
+                        break
+            except Exception:
+                pass  # Best-effort reaction
 
         async with self._semaphore:
             dashboard = self._get_dashboard()
