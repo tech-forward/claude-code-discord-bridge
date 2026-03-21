@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from typing import Literal
 
 logger = logging.getLogger(__name__)
@@ -54,12 +55,17 @@ async def classify(
     prompt = _PROMPT_TEMPLATE.format(text=last_text[:2000])
 
     try:
+        extra_kw: dict = {}
+        if sys.platform == "win32":
+            import subprocess as _sp
+            extra_kw["creationflags"] = _sp.CREATE_NO_WINDOW
         proc = await asyncio.create_subprocess_exec(
             claude_command,
             "-p",
             prompt,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **extra_kw,
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_SECONDS)

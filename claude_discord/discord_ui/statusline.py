@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,10 @@ async def render_statusline(
     Returns ``None`` if the command fails, times out, or produces empty output.
     """
     try:
+        extra_kw: dict = {}
+        if sys.platform == "win32":
+            import subprocess as _sp
+            extra_kw["creationflags"] = _sp.CREATE_NO_WINDOW
         proc = await asyncio.create_subprocess_exec(
             "bash",
             "-c",
@@ -126,6 +131,7 @@ async def render_statusline(
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            **extra_kw,
         )
         stdout, _ = await asyncio.wait_for(
             proc.communicate(json_input.encode()),
