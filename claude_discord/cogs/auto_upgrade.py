@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -558,10 +559,15 @@ class AutoUpgradeCog(commands.Cog):
             await status_target.add_reaction("✅")
         await asyncio.sleep(1)
         assert self.config.restart_command is not None  # Caller checks this
+        extra: dict = {}
+        if sys.platform == "win32":
+            import subprocess as _sp
+            extra["creationflags"] = _sp.CREATE_NO_WINDOW
         await asyncio.create_subprocess_exec(
             *self.config.restart_command,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
+            **extra,
         )
 
     async def _run_step(
@@ -580,11 +586,16 @@ class AutoUpgradeCog(commands.Cog):
         cmd_str = " ".join(command)
         await thread.send(f"⚙️ `{cmd_str}`")
 
+        extra_kw: dict = {}
+        if sys.platform == "win32":
+            import subprocess as _sp
+            extra_kw["creationflags"] = _sp.CREATE_NO_WINDOW
         proc = await asyncio.create_subprocess_exec(
             *command,
             cwd=self.config.working_dir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            **extra_kw,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self.config.step_timeout)
         output = stdout.decode("utf-8", errors="replace").strip()

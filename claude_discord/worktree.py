@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -65,11 +66,15 @@ class CleanupResult:
 
 def _run(args: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run a subprocess and return the result (never raises on non-zero exit)."""
+    extra: dict = {}
+    if sys.platform == "win32":
+        extra["creationflags"] = subprocess.CREATE_NO_WINDOW
     return subprocess.run(
         args,
         capture_output=True,
         text=True,
         cwd=cwd,
+        **extra,
     )
 
 

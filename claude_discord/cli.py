@@ -126,11 +126,15 @@ def write_env(
 def check_claude_cli() -> bool:
     """Return True if the Claude Code CLI is installed and callable."""
     try:
+        extra: dict = {}
+        if sys.platform == "win32":
+            extra["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
             ["claude", "--version"],
             capture_output=True,
             text=True,
             timeout=5,
+            **extra,
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):

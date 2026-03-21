@@ -141,6 +141,13 @@ class ClaudeRunner:
         # to send.
         stdin_mode = asyncio.subprocess.PIPE if self.image_urls else asyncio.subprocess.DEVNULL
 
+        # On Windows, prevent each subprocess from creating a visible console window.
+        extra_kwargs: dict = {}
+        if sys.platform == "win32":
+            import subprocess as _sp
+
+            extra_kwargs["creationflags"] = _sp.CREATE_NO_WINDOW
+
         self._process = await asyncio.create_subprocess_exec(
             *args,
             stdin=stdin_mode,
@@ -149,6 +156,7 @@ class ClaudeRunner:
             cwd=cwd,
             env=env,
             limit=10 * 1024 * 1024,  # 10MB — stream-json lines can be large
+            **extra_kwargs,
         )
 
         logger.info("Claude CLI started: pid=%s", self._process.pid)
