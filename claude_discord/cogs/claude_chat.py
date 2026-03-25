@@ -97,6 +97,7 @@ class ClaudeChatCog(commands.Cog):
         inline_reply_channel_ids: set[int] | None = None,
         chat_only_channel_ids: set[int] | None = None,
         chat_only_default: bool = False,
+        mention_only_default: bool = False,
         auto_rename_threads: bool = False,
         monitor_all_channels: bool = False,
     ) -> None:
@@ -123,6 +124,8 @@ class ClaudeChatCog(commands.Cog):
         self._chat_only_channel_ids: set[int] = chat_only_channel_ids or set()
         # When True, ALL channels default to chat_only mode (suppress intermediate text).
         self._chat_only_default: bool = chat_only_default
+        # When True, ALL channels default to mention-only mode (bot must be @mentioned).
+        self._mention_only_default: bool = mention_only_default
         self._registry = registry or getattr(bot, "session_registry", None)
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._active_runners: dict[int, ClaudeRunner] = {}
@@ -224,11 +227,13 @@ class ClaudeChatCog(commands.Cog):
 
         # Check if message is in one of the configured channels (new conversation)
         if is_target_channel:
-            # In mention-only channels, only respond when the bot is @mentioned
-            if (
-                message.channel.id in self._mention_only_channel_ids
-                and self.bot.user not in message.mentions
-            ):
+            # In mention-only channels (or when mention_only_default is True),
+            # only respond when the bot is @mentioned.
+            is_mention_only = (
+                self._mention_only_default
+                or message.channel.id in self._mention_only_channel_ids
+            )
+            if is_mention_only and self.bot.user not in message.mentions:
                 return
             await self._handle_new_conversation(message)
             return
